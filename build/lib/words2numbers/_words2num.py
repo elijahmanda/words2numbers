@@ -20,7 +20,7 @@ from .data import (
 # logging
 from loguru import logger
 
-logger.disable(__name__)
+#logger.disable(__name__)
 
 @logger.catch
 def _convert_int_or_float(tokens: List[Union[str, float, int]]) -> List[Union[str, int, float]]:

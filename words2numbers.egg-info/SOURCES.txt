@@ -1,0 +1,15 @@
+LICENSE
+README.md
+setup.py
+words2numbers/__init__.py
+words2numbers/_words2num.py
+words2numbers/base.py
+words2numbers/data.py
+words2numbers/ejtoken.py
+words2numbers/normalize.py
+words2numbers/utils.py
+words2numbers.egg-info/PKG-INFO
+words2numbers.egg-info/SOURCES.txt
+words2numbers.egg-info/dependency_links.txt
+words2numbers.egg-info/requires.txt
+words2numbers.egg-info/top_level.txt

@@ -1,0 +1,2 @@
+num2words>=0.5.12
+loguru>=0.6.0
