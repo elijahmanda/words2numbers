@@ -20,7 +20,7 @@ from .data import (
 # logging
 from loguru import logger
 
-logger.disable(__name__)
+#logger.disable(__name__)
 
 @logger.catch
 def _convert_int_or_float(tokens: List[Union[str, float, int]]) -> List[Union[str, int, float]]:
@@ -116,10 +116,15 @@ def _pair_tokens(tokens: List[int]) -> List[List[int, ...]]:
     return final
 
 @logger.catch
-def _sum_nums(tokens: List[List[int]]) -> int:
+def _sum_nums(tokens: List[List[int]]) -> List[int]:
     logger.warning("Tokens recieved in _sum_nums: %s"%tokens)
     total = []
     hundred = 0
+    neg = False
+    first = tokens[0]
+    if first[0]<0:
+        tokens[0][0] = first[0]*-1
+        neg = True
     for token in tokens:
         if len(token)==1 and not token[0]%1000:
             total.append(token[0])
@@ -135,19 +140,30 @@ def _sum_nums(tokens: List[List[int]]) -> int:
                 else:
                     hundred+=n
             total.append(hundred)
+    if neg:
+        if isinstance(total[0], (list, tuple)):
+            total[0][0]=total[0][0]*-1
+        elif isinstance(total[0], int):
+            total[0]=total[0]*-1
     return total
 
-def _find_total(tokens: List[Tuple[int, int]]):
+def _find_total(tokens: List[List[int, ...], ...]) -> int:
     logger.warning("Tokens recieved in _find_total: %s"%tokens)
     total = 0
-    for n in tokens:
+    neg = False
+    for i, n in enumerate(tokens):
         num, multiplier = n
+        if i==0 and num:
+            if num<0: neg = True; num*=-1
+        elif i==0 and multiplier:
+            if num<0: neg = True; multiplier*=-1
         if not num:
             total+=multiplier
         elif not multiplier:
             total+=num
         else:
             total+=num*multiplier
+    if neg: total*=-1
     return total
 
 # some utility function
@@ -181,10 +197,14 @@ def _words2num(text: str) -> Union[int, float]:
             new_tokens.append(token[0])
         else:
             new_tokens.append(token)
+    logger.warning("new tokens: %s"%str(new_tokens))
     total = _find_total(pair(new_tokens))
     logger.warning("points: %s"%points)
     if points:
-        total+=points
+        if total>0:
+            total+=points
+        else:
+            total-=points
     if negative:
         total*=-1
     if int(total)==total and total<1e15:
