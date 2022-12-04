@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import re
+from typing import List
 from copy import copy
 from .ejtoken import tokenize as _tokenize, detokenize as _detokenize
 
@@ -78,6 +81,21 @@ def _possible_range(text):
         st, end = m.span()
         text = text_span_replace(text, " ", (st+1, end-1))
     return text
+
+def normalize_trailling_zeros(word: str) -> str:
+    if len(word)>1 and word[0]=="0":
+            word = word.lstrip("0")
+            word = "0" + word if not word[0].isdigit() else word
+    return word
+
+def normalize_negatives(tokens: List[str]) -> List[str]:
+    rt = []
+    for token in tokens:
+        if token.startswith("-") and token.count("-")==1:
+            rt.extend(["negative", token[1:]])
+        else:
+            rt.append(token)
+    return rt
 
 class Pipe:
     

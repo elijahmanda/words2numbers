@@ -5,7 +5,7 @@ ANDS = ["and"]
 POINTS = ["point"]
 NEGATIVES = ["negative", "neg", "minus"]
 
-ZEROS = ("zero", 0)
+ZEROS = (("zero", 0))
 
 ONES = OrderedDict([
     ("zero", 0),
@@ -19,6 +19,9 @@ ONES = OrderedDict([
     ("eight", 8),
     ("nine", 9),
 ])
+ONES.update([(str(val), val) for val in ONES.values()])
+ONES.update([(str(-val), -val) for val in ONES.values()])
+
 
 TEENS_AND_TEN = OrderedDict([
     ("ten", 10),
@@ -32,6 +35,8 @@ TEENS_AND_TEN = OrderedDict([
     ("eighteen", 18),
     ("nineteen", 19),
 ])
+TEENS_AND_TEN.update([(str(val), val) for val in TEENS_AND_TEN.values()])
+TEENS_AND_TEN.update([(str(-val), -val) for val in TEENS_AND_TEN.values()])
 
 TENS = OrderedDict([
     ("twenty", 20),
@@ -43,6 +48,8 @@ TENS = OrderedDict([
     ("eighty", 80),
     ("ninety", 90),
 ])
+TENS.update([(str(val), val) for val in TENS.values()])
+TENS.update([(str(-val), -val) for val in TENS.values()])
 
 HUNDRED = {"hundred": 100}
 
@@ -60,6 +67,7 @@ MULTIPLES = OrderedDict([
     ("nonillion", 1e54),
     ("decillion", 1e60)
 ])
+MULTIPLES.update([(str(val), val) for val in MULTIPLES.values()])
 
 ORDINAL_ONES = OrderedDict([
     ("first", 1),
@@ -130,16 +138,28 @@ ALL_NUMS.update(TEENS_AND_TEN)
 ALL_NUMS.update(TENS)
 ALL_NUMS.update(MULTIPLES)
 
+neg_nums = [(val*-1, val*-1) for n, val in ALL_NUMS.items() if n not in ORDINALS]
+ALL_NUMS.update(neg_nums)
+
 ALL_VALID = OrderedDict()
 ALL_VALID.update(ALL_NUMS)
-ALL_NUMS.update(dict(zip(tuple(map(str, ALL_NUMS.values())), ALL_NUMS.values())))
+string_keys = dict(zip(tuple(map(str, ALL_NUMS.values())), ALL_NUMS.values()))
+
+#ALL_NUMS.update(string_keys)
+
 other = POINTS+ANDS+NEGATIVES
 ALL_VALID.update(list(zip(other, range(len(other)))))
 ALL_VALID.update(ORDINALS)
 
+#_neg_nums = [-1*val for val in ALL_NUMS.values()]
+#NEGATIVE_ALL = NEGATIVES + _neg_nums + list(map(str, _neg_nums))
+#ALL_NUMS.update(zip(list(map(str, _neg_nums)), _neg_nums))
+#ALL_NUMS.update(zip(_neg_nums, _neg_nums))
+
 SUFFIXES = OrderedDict([
     ("k", 1000),
     ("m", 1e6),
+    ("b", 1e9),
     ("g", 1e9),
 ])
 
@@ -192,15 +212,20 @@ SKIP_HUNDRED_2 = re.compile(fr"({_ones})\s+({_tens})")
 # one twenty five
 SKIP_HUNDRED_3 = re.compile(fr"({_ones})\s+({_tens})\s+({_ones})")
 
-# Any number regex 
-ANY_NUMBER_REGEX = r"[-+]?[\d]+(?:[',]\d\d\d)*[\.]?\d*(?:[eE][-+]?\d+)?"
-DOT_ANY_NUMBER_REGEX = r"[-+]?[\.][\d]+(?:[eE][-+]?\d+)?"
+_back_neg_or_float_number = r""
+# float number regex 
+FLOAT_NUMBER_REGEX = r"[-+]?[\d]+(?:[',]\d\d\d)*(([\.]\d*)([eE][-+]?\d+)|([\.]\d*)|([eE][-+]?\d+))"
+DOT_FLOAT_NUMBER_REGEX = r"[-+]?[\.]\d+(([eE][-+]?\d+)|([eE][-+]?\d+))?"
+FLOAT_NUMBER_REGEX = fr"({FLOAT_NUMBER_REGEX}|{DOT_FLOAT_NUMBER_REGEX})"
 
 # integer
-INTEGER_REGEX = r"\d+"
+NEGATIVE_INTEGER_REGEX = r"[-][\d]+(?:[',]\d\d\d)*"
+
+# any Number
+NEG_OR_FLOAT_NUMBER_REGEX = fr"({FLOAT_NUMBER_REGEX}|{NEGATIVE_INTEGER_REGEX})"
 
 # any spelled number
-NUMBER_SPELLED = "|".join(ALL_NUMS.keys())
+NUMBER_SPELLED = "|".join(list(map(str, ALL_NUMS.keys())))
 
 # (negative)? 230 ((point) 5 7 or five seven)?
 _all_ones = list(map(str, ONES.values()))+list(ONES.keys())
@@ -217,19 +242,48 @@ MIXED_SPOKEN_REGEX = (
 
 # any Number followed by multiple 2.3 million
 _multiples = "|".join(n for n in MULTIPLES if n!="hundred")
-NUMBER_FOLLOWED_BY_POWER_REGEX = r"_any_number\s{1,2}(_multiples)".replace("_any_number", ANY_NUMBER_REGEX) \
+FLOAT_FOLLOWED_BY_POWER_REGEX = r"_neg_or_float_number\s{1,2}(_multiples)".replace("_neg_or_float_number", FLOAT_NUMBER_REGEX) \
 .replace("_multiples", _multiples)
 
 # any Number followed by a multiple suffix
-_suffixes = "|".join([n for n in SUFFIXES])
-NUMBER_FOLLOWED_BY_SUFFIX_REGEX = r"(({_negs})\s)?{_any_number}({_suffixes})".format(_any_number=ANY_NUMBER_REGEX, _suffixes=_suffixes, _negs=_negs)
+_suffixes = "".join(SUFFIXES.keys())
+FLOAT_FOLLOWED_BY_SUFFIX_REGEX = r"(({_negs})\s)?{_neg_or_float_number}[{_suffixes}]".format(_neg_or_float_number=NEG_OR_FLOAT_NUMBER_REGEX, _suffixes=_suffixes, _negs=_negs)
 
 # infomals couple, pair, dozen...
 _informal = "|".join(INFORMAL_EXACT.keys())
 INFORMALS_EXACT_REGEX = r"\b((1|0|one|zero)\s)?({_informal})\b".format(_informal=_informal)
 
 _informals_multiplyable = "|".join(INFORMALS_MULTIPLYABLE.keys())
-INFORMALS_MULTIPLYABLE_REGEX = r"({_any_number}\s)?({_informals_multiplyable})".format(_any_number=ANY_NUMBER_REGEX,_informals_multiplyable=_informals_multiplyable)
+INFORMALS_MULTIPLYABLE_REGEX = r"({_neg_or_float_number}\s)?({_informals_multiplyable})".format(_neg_or_float_number=NEG_OR_FLOAT_NUMBER_REGEX,_informals_multiplyable=_informals_multiplyable)
 
 _ordinal_suffixes = "|".join(ORDINAL_SUFFIXES)
 ORDINAL_NUMERAL_REGEX = r"\d+({_ordinal_suffixes})".format(_ordinal_suffixes=_ordinal_suffixes)
+
+#below_hundred = f"({_ones})|({_teens})|({_tens})"
+#ten_one = fr"({_tens})[\s\-]({_ones})"
+#comma_space = r"\s{,2}?[,]?\s{1,2}"
+#hundred = (
+#    fr"(({_ones})\s)?"
+#    "hundred"
+#    r"("
+#    r"\s(and\s)?"
+#    "("
+#    f"({ten_one})"
+#    "|"
+#    f"({_ones})"
+#    "|"
+#    f"({_teens})"
+#    "|"
+#    f"({_tens})"
+#    "))?"
+#)
+#part = f"({hundred})|({below_hundred})"
+#end = fr"({hundred})|((and\s)?({below_hundred}))"
+#number = (
+#    fr"({part})"
+#    )
+#number = re.compile(number, re.IGNORECASE)
+#text = "seven hundred and eighty eight thousand six hundred and twenty nine"
+#for m in number.finditer(text):
+#    if m.group():
+#        print(m)

@@ -42,7 +42,7 @@ def _convert_int_or_float(tokens: List[Union[str, float, int]]) -> List[Union[st
 def _word_to_number(tokens: List[Union[str, float, int]]) -> List[Union[str, int, float]]:
     def _inner_conv(word):
         val = ALL_NUMS.get(word)
-        if val:
+        if val is not None:
             return val
         return word
     return [_inner_conv(token) for token in tokens]
@@ -54,7 +54,7 @@ def _convert_nums_with_suffix(tokens: List[Union[str, float, int]]) -> List[Unio
         n = n.lower()
         num = n[:-1]
         suffix = n[-1]
-        logger.warning("num: %s; suffix: %s"%(num, suffix))
+        logger.info("num: %s; suffix: %s"%(num, suffix))
         if not suffix in SUFFIXES:
             return n
         num = _convert_int_or_float([num])[0]
@@ -80,9 +80,9 @@ class _ConversionPipe:
         self._pipes = [
             lambda tokens: [re.sub(r"[',]", "", token) for token in tokens],
             lambda tokens: [token for token in tokens if token!="and"],
+            _word_to_number,
             _convert_num_ordinals,
             _convert_int_or_float,
-            _word_to_number,
             _convert_nums_with_suffix,
         ]
     
@@ -92,7 +92,7 @@ class _ConversionPipe:
             tokens = pipe(tokens)
         return tokens
 
-
+@logger.catch
 def _pair_tokens(tokens: List[int]) -> List[List[int, ...]]:
     logger.warning("Tokens recieved before final: %s"%tokens)
     build = []
@@ -115,6 +115,7 @@ def _pair_tokens(tokens: List[int]) -> List[List[int, ...]]:
     logger.warning("final %s"%final)
     return final
 
+@logger.catch
 def _sum_nums(tokens: List[List[int]]) -> int:
     logger.warning("Tokens recieved in _sum_nums: %s"%tokens)
     total = []
@@ -158,7 +159,8 @@ def _ensure_iterable(obj):
 def _words2num(text: str) -> Union[int, float]:
     cleaned = Pipe()(text.lower())
     tokens = tokenize(cleaned)
-    tokens = _ConversionPipe()(tokens)
+    pipe = _ConversionPipe()
+    tokens = pipe(tokens)
     points = None
     negative = False
     if tokens[0] in NEGATIVES:
@@ -167,9 +169,8 @@ def _words2num(text: str) -> Union[int, float]:
     if "point" in tokens:
         point_idx = tokens.index("point")
         points = "".join(_ensure_iterable(tokens[point_idx+1:]))
-        points = "0."+points
+        points = float(f"0.{points}")
         tokens = tokens[:point_idx]
-        
     paired = _pair_tokens(tokens)
     logger.warning("paired %s"%paired)
     summed = _sum_nums(paired)
@@ -183,7 +184,7 @@ def _words2num(text: str) -> Union[int, float]:
     total = _find_total(pair(new_tokens))
     logger.warning("points: %s"%points)
     if points:
-        total+=float(points)
+        total+=points
     if negative:
         total*=-1
     if int(total)==total and total<1e15:

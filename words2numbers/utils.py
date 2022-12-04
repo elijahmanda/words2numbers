@@ -1,12 +1,44 @@
 from __future__ import annotations
 
-from typing import Tuple, List,Union, Any
+from typing import Tuple, List,Union, Any, Dict, Callable, Iterable
 import random
 from random import randint, choice, random as _random_float
 from num2words import num2words
 from .data import SUFFIXES
 
+def align_results(res: List[Tuple[str, int | float, Dict[str, Union[str, Union[str, Tuple[int, int]]]]]]) -> Tuple[str, float | int, str, Tuple[int, int], str]:
+    text = res[0]
+    number = res[1]
+    info = res[2]
+    number_type = info["number_type"]
+    span = info["span"]
+    value_type = info["value_type"]
+    return text, number, number_type, value_type,span
+    
+def tuple_map(func: Callable[Iterable, Iterable], iterable: Iterable[Iterable[Any, ...]]) -> Tuple[Iterable,...]:
+    return tuple(map(func, iterable))
 
+def is_neg_and_ones(num: str | int) -> bool:
+    val = parse_num(num)
+    if val is None: return False
+    if isinstance(val, int) and val<=-1 and val>=-9:
+        return True
+    return False
+
+def parse_num(num: str) -> int | float | None:
+    num = num.lower()
+    try:
+        val_int = int(num)
+    except ValueError:
+        val_int = None
+    try:
+        val_float = float(num)
+    except ValueError:
+        val_float = None
+    if val_float and ("e" in num or "." in num):
+        return val_float
+    return val_int
+    
 def text_span_replace(text: str, replacement: str, span: Tuple[int, int]) -> str:
     """ Replace text[span[0] : span[1]] with `replacement` """
     left_chunk = text[0:span[0]]
@@ -19,12 +51,12 @@ def get_text_chunks(text: str, span: Tuple[int,int]) -> Tuple[str, str, str]:
     middle_chunk = text[span[0]:span[1]]
     return left_chunk, middle_chunk, right_chunk
     
-def pair(tokens: List[Any]) -> List[Tuple[Union[Any, Any], Union[Any, int]]]:
+def pair(tokens: List[Any], last=0) -> List[Tuple[Any, Any]]:
     tk_len = len(tokens)
     if tk_len==1:
-        return [(tokens[0], 0)]
+        return [(tokens[0], last)]
     if tk_len % 2:
-        tokens.append(0)
+        tokens.append(last)
         tk_len += 1
     new_tokens = []
     n = 0
@@ -43,7 +75,7 @@ def gen_nums(
     num_suffix:int=None, # how many numbers with suffixes
     ordinal_ints: int= None, # number of ordinal numerals
     shuffle: int=None, # how many times to shuffle the return values
-    ) -> List[str]:
+    ) -> List[str, ...]:
     nms = []
     for _ in range(n):
         word = num2words(random.randint(*n_range))

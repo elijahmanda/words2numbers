@@ -21,24 +21,30 @@ from .data import (
     ZEROS,
     NEGATIVES,
     MIXED_SPOKEN_REGEX,
-    ANY_NUMBER_REGEX,
-    NUMBER_FOLLOWED_BY_POWER_REGEX,
-    NUMBER_FOLLOWED_BY_SUFFIX_REGEX,
-    DOT_ANY_NUMBER_REGEX,
+    NEGATIVE_INTEGER_REGEX,
+    FLOAT_NUMBER_REGEX,
+    FLOAT_FOLLOWED_BY_POWER_REGEX,
+    FLOAT_FOLLOWED_BY_SUFFIX_REGEX,
+    DOT_FLOAT_NUMBER_REGEX,
     INFORMALS_EXACT_REGEX,
     INFORMALS_MULTIPLYABLE_REGEX,
     ORDINAL_NUMERAL_REGEX
 )
-from words2numbers.normalize import Pipe
-from words2numbers.utils import text_span_replace, count_spaces
+from words2numbers.normalize import Pipe, normalize_trailling_zeros
+from words2numbers.utils import text_span_replace, count_spaces, is_neg_and_ones, parse_num
 from words2numbers.ejtoken import tokenize
 from ._words2num import _words2num
 
 logger.disable(__name__)
 
-class CompStr:
+class CompStr(str):
+    """ Comparable string """
     def __init__(self, string: str):
         self._string = string
+
+    @property
+    def string(self):
+        return self._string
 
     @property
     def is_point(self):
@@ -47,7 +53,7 @@ class CompStr:
     @property
     def is_num_word(self):
         
-        return self._string in ALL_VALID
+        return self._string in ALL_VALID or is_neg_and_ones(self._string)
 
     @property
     def is_and(self):
@@ -76,12 +82,16 @@ class CompStr:
         return self._string == val
 
     def __hash__(self):
-        return hash((self._string, self.is_and, self.is_num_word, self.is_point))
+        return hash(self.string)
 
 
 class ModInt(int):
     def __init__(self, *args):
         self._is_ordinal = False
+
+    @property
+    def string(self):
+        return str(self)
         
     @property
     def is_point(self):
@@ -102,6 +112,9 @@ class ModInt(int):
     @is_ordinal.setter
     def is_ordinal(self, val: bool):
         self._is_ordinal = val
+
+    def __hash__(self):
+        return hash(self.string)
 
 
 @logger.catch
@@ -130,7 +143,7 @@ def IN(number: int, *categories: Tuple[str]) -> bool:
     # remove duplicates
     categories = set(categories)
     if not categories:
-        contains = False
+        return False
     cat = {
         "ones": ONES.values(),
         "teens": TEENS_AND_TEN.values(),
@@ -170,12 +183,12 @@ def _check_and_point(numbers: Tuple[Union[int, str]]) -> Tuple[Tuple[bool], Tupl
     beginning = True
     index = 0
     
-    def make_order(val: str) -> CompStr | ModInt:
+    def make_order(val):
         is_ordinal = False
         if val in ORDINALS:
             is_ordinal = True
         num_ = ALL_NUMS.get(val)
-        if num_:
+        if num_ is not None:
             val = num_
         if isinstance(val, str):
             val = CompStr(val)
@@ -186,7 +199,7 @@ def _check_and_point(numbers: Tuple[Union[int, str]]) -> Tuple[Tuple[bool], Tupl
         return val
 
     
-    def add_to_con(truth: bool, idx: int=None) -> NoReturn:
+    def add_to_con(truth: bool, idx=None):
         nonlocal bool_container, prev_multiple, prev_point, and_sep, index, idx_container, prev_false_truth, beginning
         if not truth:
             prev_multiple = CompStr("always-big")
@@ -213,14 +226,14 @@ def _check_and_point(numbers: Tuple[Union[int, str]]) -> Tuple[Tuple[bool], Tupl
             add_to_con(False, i)
             
         # nothing can come next after an ordinal
-        
         elif num.is_ordinal:
             add_to_con(False, i)
         
-        elif next_num.is_point and not IN(nnext_num, "ones"):
+        elif next_num<0:
             add_to_con(False, i)
-        
+            
         elif num in NEGATIVES:
+            logger.debug("negative: %s"%num)
             if (next_num in ALL_NUMS.values()) and beginning:
                 add_to_con(True)
             else:
@@ -253,6 +266,7 @@ def _check_and_point(numbers: Tuple[Union[int, str]]) -> Tuple[Tuple[bool], Tupl
             else:
                 add_to_con(False, i)
         
+        # 
         elif num>=prev_multiple:
             add_to_con(False, i)
             
@@ -260,6 +274,7 @@ def _check_and_point(numbers: Tuple[Union[int, str]]) -> Tuple[Tuple[bool], Tupl
             add_to_con(False, i)
             
         elif IN(num, "ones"):
+            logger.warning("num: %s in ones"%num)
             if prev_point:
                 if IN(next_num, "ones"):
                     add_to_con(True)
@@ -268,7 +283,9 @@ def _check_and_point(numbers: Tuple[Union[int, str]]) -> Tuple[Tuple[bool], Tupl
             elif pprev==100 and prev_num.is_and and next_num==100:
                 add_to_con(False)
             elif not prev_point and next_num.is_point:
-                add_to_con(True)
+                if IN(nnext_num, "ones"):
+                    add_to_con(True)
+                else: add_to_con(False, i)
             elif num == 0:
                 if IN(next_num, "ones") or prev_point:
                     add_to_con(True)
@@ -289,27 +306,35 @@ def _check_and_point(numbers: Tuple[Union[int, str]]) -> Tuple[Tuple[bool], Tupl
             if is_multiple1000(next_num):
                 add_to_con(True)
             elif next_num.is_point:
-                add_to_con(True)
+                if IN(nnext_num, "ones"):
+                    add_to_con(True)
+                else: add_to_con(False, i)
             else:
                 add_to_con(False, i)
                 
         elif IN(num, "tens"):
+            logger.info("%s is valid %s"%(next_num, next_num.is_num_word))
             if IN(next_num, "ones"):
                 add_to_con(True)
             # ordinals
             elif ORDINAL_ONES.get(next_num):
+                logger.warning("%s added after tens `%s`"%(next_num, num))
                 add_to_con(True)
             elif is_multiple1000(next_num):
                 add_to_con(True)
             elif next_num.is_point:
-                add_to_con(True)
+                if IN(nnext_num, "ones"):
+                    add_to_con(True)
+                else: add_to_con(False, i)
             else:
                 add_to_con(False, i)
         
         elif is_multiple1000(num):
             prev_multiple = num
             if next_num.is_point:
-                add_to_con(True)
+                if IN(nnext_num, "ones"):
+                    add_to_con(True)
+                else: add_to_con(False, i)
             elif next_num.is_and:
                 add_to_con(True)
             elif num>next_num:
@@ -332,22 +357,14 @@ def _check_and_point(numbers: Tuple[Union[int, str]]) -> Tuple[Tuple[bool], Tupl
                 add_to_con(True)
             else:
                 add_to_con(False, i)
-            
-    return tuple(bool_container), tuple(idx_container)
+    results = tuple(bool_container), tuple(idx_container)
+    logger.warning("results: %s"%str(results))     
+    return results
     
-def _check_mixed_spoken(text: str) -> Tuple[str, List[str, Tuple[int, int], ...]]:
-    """ extract mixed numbers like negative 234 point 2 4 three first """
+def _check_mixed_spoken(text: str, pipes: List[str]) -> Tuple[str, List[str, Tuple[int, int], ...]]:
+    """ extract mixed numbers like negative 234 point 2 4 three first since the second extractor does not extract numbers that are not ones, teens, tens, hundred, multiples """
     rreturn = []
-    regex_pipes = [
-        ORDINAL_NUMERAL_REGEX,
-        NUMBER_FOLLOWED_BY_SUFFIX_REGEX,
-        MIXED_SPOKEN_REGEX,
-        INFORMALS_EXACT_REGEX,
-        INFORMALS_MULTIPLYABLE_REGEX,
-        #ANY_NUMBER_REGEX,
-        #DOT_ANY_NUMBER_REGEX,
-    ]
-    for _pipe in regex_pipes:
+    for i, _pipe in enumerate(pipes):
         for match in re.finditer(_pipe,text, re.IGNORECASE | re.UNICODE):
             if len(match.group().split())>1 and _pipe==MIXED_SPOKEN_REGEX:
                 lc,rc = count_spaces(match.group())
@@ -358,7 +375,8 @@ def _check_mixed_spoken(text: str) -> Tuple[str, List[str, Tuple[int, int], ...]
                 , (start, end)))
                 # we replace the found number with `$` to avoid the next Pipeline extracting the same number again
                 text = text_span_replace(text, "$"*(end-start), (start, end))
-            elif _pipe!=MIXED_SPOKEN_REGEX:
+                logger.debug("match: %s; regex: %s; index: %d"%(match.group(), _pipe, i))
+            else:#MIXED_SPOKEN_REGEX:
                 lc,rc = count_spaces(match.group())
                 start, end = (match.span()[0]+lc
                 ,match.span()[1]-rc
@@ -367,14 +385,19 @@ def _check_mixed_spoken(text: str) -> Tuple[str, List[str, Tuple[int, int], ...]
                 , (start, end)))
                 # we replace the found number with `$` to avoid the next Pipeline extracting the same number again
                 text = text_span_replace(text, "$"*(end-start), (start, end))
+                logger.debug("match: %s; regex: %s; index: %d"%(match.group(), _pipe, i))
     return (text, # we pass the text to the next Pipeline
     rreturn)
         
 
-def _normalize_and(numbers: List[List[Union[int, str]]], indexes: List[Tuple[int, int]]) -> List[List[Union[int, str]]]:
-    rtidxs1 = []
+def _normalize_and(numbers, indexes) -> List[List[Union[int, str]]]:
+    """ normalize numbers that are in the form [and, num] or [num, and] to [num]
+    args:
+        number: List[List[Union[int, str]]]
+        indexes: List[Tuple[int, int]]
+        return: List[List[Union[int, str]]]
+    """
     def _normalize_and_inner(numbers, indexes):
-        rtidxs = []
         for i, (n, _) in enumerate(zip(numbers, indexes)):
             if len(n)>1:
                 first = n[0]
@@ -382,32 +405,28 @@ def _normalize_and(numbers: List[List[Union[int, str]]], indexes: List[Tuple[int
                 second_last = n[-2]
                 if (last in ANDS+POINTS+NEGATIVES):
                     numbers.insert(i+1, [n[-1]])
-                    rtidxs.append((indexes[i], "NUMBER"))
                     n.pop(-1)
                 elif (second_last in ANDS and last in ZEROS):
                     numbers.insert(i+1, [n[-2]])
                     numbers.insert(i+2, [n[-1]])
                     n.pop(-2); n.pop(-1)
-                    rtidxs.append((indexes[i], "NUMBER"))
                 elif first in ANDS:
                     numbers.insert(i, [n[0]])
                     n.pop(0)
-                    rtidxs.append((indexes[i], "NUMBER"))
                 else:
-                    rtidxs.append((indexes[i], "NUMBER"))
+                    pass
             elif len(n)==1 and n[0] in ALL_NUMS:
-                rtidxs.append((indexes[i], "NUMBER"))
-            rtidxs.append(indexes[i])
-        return numbers, indexes
-    numbers, rtidxs1 = _normalize_and_inner(numbers, indexes)
-    return numbers, list(filter(lambda x: isinstance(x, tuple), rtidxs1))
+                pass
+        return numbers
+    numbers = _normalize_and_inner(numbers, indexes)
+    return numbers
 
 def _recover_real_indices_and_match(text: str, nums: List[List[str]]) -> List[Tuple[str, Tuple[int, int]], ...]:
     last_start = 0
     real = []
     for n in nums:
-        ptt = " ".join(n).replace(" ", r"\s{,2}?[,\-]?\s{,2}?")
-        ptt = r"\b"+ptt+r"\b"
+        ptt = r"\s{,2}?[,\-]?\s{,2}?".join(n)
+        #ptt = r"\b"+ptt+r"\b"
         for m in re.finditer(ptt, text[last_start:], re.IGNORECASE):
             real.append((m.group(), m.span()))
             last_start=m.span()[0]
@@ -420,7 +439,15 @@ ORDINAL = "ordinal"
 FLOAT = "float"
 INTEGER = "integer"
 
-def _info_gen(num_string: str, num_val: Union[int, float], spans: Tuple[int, int]) -> Dict[str, Any]:
+def generate_number_info(num_string: str, num_value: Union[int, float], spans: Tuple[int, int]) -> Dict[str, Union[str, Tuple[int, int]]]:
+    """ generate information about a number 
+    args:
+        num_string: str
+        num_value: float | int
+        span: Tuple[int, int]
+    
+    return: Dict[str, Union[str, Tuple[int, int]]]
+    """
     data = {}
     data["span"] = spans
     data[NUMBER_TYPE] = "number"
@@ -429,34 +456,57 @@ def _info_gen(num_string: str, num_val: Union[int, float], spans: Tuple[int, int
     last = tokens[-1]
     if last in ORDINALS or re.match(ORDINAL_NUMERAL_REGEX, last, re.IGNORECASE):
         data[NUMBER_TYPE] = ORDINAL
-    if "point" in tokens or isinstance(num_val, float):
+    if "point" in tokens or isinstance(num_value, float):
         data[NUMBER_VALUE_TYPE] = FLOAT
     else:
         data[NUMBER_VALUE_TYPE] = INTEGER
     
     return data
 
+regex_pipes = [
+        FLOAT_FOLLOWED_BY_SUFFIX_REGEX,
+        ORDINAL_NUMERAL_REGEX,
+        INFORMALS_EXACT_REGEX,
+        INFORMALS_MULTIPLYABLE_REGEX,
+        MIXED_SPOKEN_REGEX,
+        
+       FLOAT_FOLLOWED_BY_POWER_REGEX,
+       FLOAT_NUMBER_REGEX,
+       NEGATIVE_INTEGER_REGEX,
+    ]
+regex_pipes=[]
+    
 @logger.catch
-def words2numbers(text: str, debug: bool=False, timeit=False) ->List[Tuple[str, Tuple[int, int]], ...]:
+def words2numbers(text: str, debug: bool=False, timeit=False):
+    """ extract numbers from text
+    args:
+        text: str
+        return: List[Tuple[str, int | float, Dict[str, Union[str, Tuple[int, int]]]]
+    """
     start_time = perf_counter()
     if debug:
         logger.enable(__name__)
     logger.info("Original text: %s"%text)
-    words, mixed_matches = _check_mixed_spoken(text)
+    words, mixed_matches = _check_mixed_spoken(text, regex_pipes)
     recovery_text = copy(words)
     logger.debug("Text after `first extraction pipe`: %s"%words)
     words = Pipe()(words)
     logger.warning("Normalized for tokenization:  %s:"%words)
-    words = tokenize(words)
-    logger.debug("Tokenized: %s"%words)
-    bools, _ = _check_and_point(words)
+    tokens = tokenize(words)
+    logger.debug("Tokenized: %s"%tokens)
+    tokens = list(map(normalize_trailling_zeros, tokens))
+    logger.debug("Tokenized: %s"%tokens)
+    #tokens = normalize_negatives(tokens)
+    #logger.debug("Tokenized: %s"%tokens)
+    bools, _ = _check_and_point(tokens)
     end_idxs =_get_idxs_from_bool(bools)
-    nums, idxs =_get_numbers_from_idxs(words, end_idxs)
-    norm_nums, _ = _normalize_and(nums, list(map(list, idxs)))
+    nums, idxs =_get_numbers_from_idxs(tokens, end_idxs)
+    norm_nums = _normalize_and(nums, list(map(list, idxs)))
     norm_nums= list(filter(lambda n: (n[0] in ALL_NUMS) or (len(n)>1 and (n[0] in POINTS or n[0] in NEGATIVES)), norm_nums))
     real = _recover_real_indices_and_match(recovery_text, norm_nums)
-    real.extend(mixed_matches)
+    real+=mixed_matches
     real = list(map(lambda n: n[0], real))
+    logger.warning("real: %s"%real)
     rt = []
     for n in real:
         for m in re.finditer(n, text, re.IGNORECASE):
@@ -464,26 +514,30 @@ def words2numbers(text: str, debug: bool=False, timeit=False) ->List[Tuple[str, 
             rt.append((n, m.span()))
             # we replace the found number with `$` to avoid the next Pipeline extracting the same number again
             text = text_span_replace(text, "$"*(end-start), (start, end))
+            logger.debug("text: %s; n: %s; m.span, m.group = %s"%(text, n, (m.span(), m.group())))
             break
-    last_pipes = [
-        NUMBER_FOLLOWED_BY_POWER_REGEX,
-        ANY_NUMBER_REGEX,
-        DOT_ANY_NUMBER_REGEX,
-    ]
-    for any_num in last_pipes:
-        for m in re.finditer(any_num, text, re.IGNORECASE):
-            start, end = m.span()
-            rt.append((m.group(), m.span()))
-            # we replace the found number with `$` to avoid the next Pipeline extracting the same number again
-            text = text_span_replace(text, "$"*(end-start), (start, end))
-    end_time = perf_counter()
+    
+    logger.debug("rt: %s"%rt)
     rt_final = []
     for n in rt:
         num_string = n[0]
         value = _words2num(num_string)
-        rt_final.append((num_string, value, _info_gen(num_string, value, n[1])))
+        rt_final.append(
+            (
+                num_string,
+                value,
+                generate_number_info(
+                    num_string,
+                    value,
+                    n[1]
+                )
+            )
+        )
+    logger.debug("rt: %s"%rt)
+    logger.debug("rt_final: %s"%rt_final)
+    end_time = perf_counter()
     if debug and not timeit:
         logger.info("Took: %s seconds"%(end_time-start_time))
     if timeit and not debug:
         print("Took: %s seconds"%(end_time-start_time))
-    return sorted(rt_final, key=lambda n: n[2]["span"])
+    return sorted(rt_final, key=lambda n: n[2]["span"][0])
