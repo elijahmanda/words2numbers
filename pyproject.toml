@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "words2numbers"
-version = "4.12.22"
+version = "5.12.22"
 description = "A python package for extracting numbers from text"
 readme = "README.md"
 authors = [{ name = "Elijah Manda", email = "elijahmandajc@gmail.com" }]
