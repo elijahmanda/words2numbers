@@ -4,7 +4,7 @@ words2numbers is a python library for extracting numbers from unstructured text.
 
 ## Installation
 
-Use the package manager [pip](https://pip.pypa.io/en/stable/) to install foobar.
+Use the package manager [pip](https://pip.pypa.io/en/stable/) to install words2numbers.
 
 ```bash
 pip install words2numbers
