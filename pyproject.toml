@@ -1,0 +1,24 @@
+# pyproject.toml
+
+[build-system]
+requires      = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "words2numbers"
+version = "4.12.22"
+description = "A python package for extracting numbers from text"
+readme = "README.md"
+authors = [{ name = "Elijah Manda", email = "elijahmandajc@gmail.com" }]
+license = { file = "LICENSE" }
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+]
+keywords = ["nlp", "extraction", "numbers"]
+dependencies = [
+    "num2words >= 0.5.12",
+    "loguru >= 0.6.0",
+]
+requires-python = ">=3.9"
