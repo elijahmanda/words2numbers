@@ -15,7 +15,7 @@ pip install words2numbers
 ```python
 from words2numbers import words2numbers
 
-print(words2numbers("I have six hundred and twenty six dollars"))
+print(words2numbers("I have six hundred and twenty nine dollars"))
 [('six hundred and twenty nine',
   629,
   {'number_type': 'number', 'span': (7, 34), 'value_type': 'integer'})]
