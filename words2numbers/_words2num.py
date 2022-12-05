@@ -187,6 +187,8 @@ def _words2num(text: str) -> Union[int, float]:
         points = "".join(_ensure_iterable(tokens[point_idx+1:]))
         points = float(f"0.{points}")
         tokens = tokens[:point_idx]
+    if not tokens:
+        tokens = [0]
     paired = _pair_tokens(tokens)
     logger.warning("paired %s"%paired)
     summed = _sum_nums(paired)
