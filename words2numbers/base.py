@@ -474,7 +474,7 @@ regex_pipes = [
        FLOAT_NUMBER_REGEX,
        NEGATIVE_INTEGER_REGEX,
     ]
-regex_pipes=[]
+
     
 @logger.catch
 def words2numbers(text: str, debug: bool=False, timeit=False):
