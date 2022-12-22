@@ -113,7 +113,7 @@ def _pair_tokens(tokens: List[int]) -> List[List[int, ...]]:
             logger.warning("final after final.append([token])=> %s"%(final))
     final.append(build)
     logger.warning("final %s"%final)
-    return final
+    return list(filter(lambda x: x!=[],final))
 
 @logger.catch
 def _sum_nums(tokens: List[List[int]]) -> List[int]:
